@@ -997,7 +997,7 @@ MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES = OrderedDict(
         ("perception_lm", "PerceptionLMForConditionalGeneration"),
         ("pi0", "PI0ForConditionalGeneration"),
         ("pix2struct", "Pix2StructForConditionalGeneration"),
-        ("pixtral", "LlavaForConditionalGeneration"),
+        ("llava", "LlavaForConditionalGeneration"),
         ("pp_chart2table", "GotOcr2ForConditionalGeneration"),
         ("qwen2_5_vl", "Qwen2_5_VLForConditionalGeneration"),
         ("qwen2_vl", "Qwen2VLForConditionalGeneration"),
