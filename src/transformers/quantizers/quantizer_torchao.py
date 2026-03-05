@@ -67,7 +67,7 @@ class TorchAoHfQuantizer(HfQuantizer):
         super().__init__(quantization_config, **kwargs)
 
         self.quantized_param_size = None
-        quantization_config = cast(TorchAoConfigLike, self.quantization_config)
+        quantization_config = self.quantization_config
         quant_type = quantization_config.quant_type
         if isinstance(quant_type, str):
             map_to_param_size = {
@@ -106,7 +106,7 @@ class TorchAoHfQuantizer(HfQuantizer):
                     )
 
     def update_dtype(self, dtype):
-        quantization_config = cast(TorchAoConfigLike, self.quantization_config)
+        quantization_config = self.quantization_config
         if quantization_config.quant_type == "int4_weight_only":
             if dtype != torch.bfloat16:
                 logger.warning_once(
@@ -134,7 +134,7 @@ class TorchAoHfQuantizer(HfQuantizer):
         return max_memory
 
     def _process_model_before_weight_loading(self, model: "PreTrainedModel", checkpoint_files=None, **kwargs):
-        quantization_config = cast(TorchAoConfigLike, self.quantization_config)
+        quantization_config = self.quantization_config
         self.modules_to_not_convert = self.get_modules_to_not_convert(
             model, quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
         )
@@ -158,7 +158,7 @@ class TorchAoHfQuantizer(HfQuantizer):
         # we only quantize the weight of nn.Linear and nn.Embedding
         module, tensor_name = get_module_from_name(model, param_name)
         _QUANTIZABLE = [torch.nn.Linear]
-        quantization_config = cast(TorchAoConfigLike, self.quantization_config)
+        quantization_config = self.quantization_config
         if quantization_config.include_input_output_embeddings:
             _QUANTIZABLE.append(torch.nn.Embedding)
 
@@ -187,7 +187,7 @@ class TorchAoHfQuantizer(HfQuantizer):
             "int8_weight_only",
             "int8_dynamic_activation_int8_weight",
         ]
-        quantization_config = cast(TorchAoConfigLike, self.quantization_config)
+        quantization_config = self.quantization_config
         return quantization_config.quant_type in supported_quant_types_for_training
 
     @property

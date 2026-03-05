@@ -12,9 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
-from .._typing import HqqModelLike
 from ..integrations import prepare_for_hqq_linear
 from ..utils import is_hqq_available, is_torch_available, logging
 from .base import HfQuantizer

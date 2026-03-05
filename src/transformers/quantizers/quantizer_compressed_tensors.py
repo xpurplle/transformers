@@ -13,9 +13,6 @@
 # limitations under the License.
 
 
-from typing import cast
-
-from .._typing import CompressedTensorsConfigLike
 from ..utils import is_compressed_tensors_available, is_torch_available, logging
 from ..utils.quantization_config import CompressedTensorsConfig
 from .base import HfQuantizer
@@ -71,11 +68,10 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
         from compressed_tensors.quantization import apply_quantization_config
 
         ct_quantization_config = self.compressor.quantization_config
-        quantization_config = cast(CompressedTensorsConfigLike, self.quantization_config)
 
         # Always initialize compressed wrappers to match the checkpoint
         apply_quantization_config(model, ct_quantization_config, self.run_compressed)
-        if quantization_config.is_quantization_compressed or quantization_config.is_sparsification_compressed:
+        if self.quantization_config.is_quantization_compressed or self.quantization_config.is_sparsification_compressed:
             self.compressor.compress_model(model=model)
 
     def _process_model_after_weight_loading(self, model, **kwargs):
@@ -108,8 +104,7 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
     def is_qat_trainable(self) -> bool:
         """Loaded Models can carry out quantization aware training"""
         # models need to be decompressed carry out qat
-        quantization_config = cast(CompressedTensorsConfigLike, self.quantization_config)
-        return not self.run_compressed or not quantization_config.is_quantization_compressed
+        return not self.run_compressed or not self.quantization_config.is_quantization_compressed
 
     def is_serializable(self) -> bool:
         """Models quantized using compressed tensors can be saved to disk"""

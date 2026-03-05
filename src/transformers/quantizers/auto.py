@@ -13,9 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import warnings
-from typing import cast
-
-from .._typing import BnbLoadIn8BitConfigLike, LoadingAttributesConfigLike
 from ..models.auto.configuration_auto import AutoConfig
 from ..utils import logging
 from ..utils.quantization_config import (
@@ -253,9 +250,7 @@ class AutoHfQuantizer:
         if isinstance(quantization_config, LOADING_ATTRIBUTES_CONFIG_TYPES) and isinstance(
             quantization_config_from_args, LOADING_ATTRIBUTES_CONFIG_TYPES
         ):
-            loading_attr_dict = cast(
-                LoadingAttributesConfigLike, quantization_config_from_args
-            ).get_loading_attributes()
+            loading_attr_dict = quantization_config_from_args.get_loading_attributes()  # type: ignore[union-attr]
             for attr, val in loading_attr_dict.items():
                 setattr(quantization_config, attr, val)
 
