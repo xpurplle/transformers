@@ -20,13 +20,13 @@ if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
     from ..utils.quantization_config import BitsAndBytesConfig
 
+from .._typing import has_torch_hpu
 from ..utils import (
     ACCELERATE_MIN_VERSION,
     BITSANDBYTES_MIN_VERSION,
     is_accelerate_available,
     is_bitsandbytes_available,
     is_torch_available,
-    is_torch_hpu_available,
     is_torch_npu_available,
     is_torch_xpu_available,
     logging,
