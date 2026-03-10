@@ -524,14 +524,16 @@ class Serve:
             # Parses the multipart/form-data request into the request format used by other endpoints
             async with request.form() as form:
                 file_field = form["file"]
+                if isinstance(file_field, str):
+                    raise TypeError("Expected file upload, got string")
                 parsed_request = TransformersTranscriptionCreateParams(
-                    file=await file_field.read(),  # type: ignore[union-attr]
+                    file=await file_field.read(),
                     model=form["model"],
                     # TODO: add other fields
                 )
                 logger.debug(
-                    f"Received file: {file_field.filename}; MIME type: {file_field.content_type}; "  # type: ignore[union-attr]
-                    f"size: {file_field.size / 1024:.2f} KiB"  # type: ignore[operator]
+                    f"Received file: {file_field.filename}; MIME type: {file_field.content_type}; "
+                    f"size: {file_field.size / 1024:.2f} KiB"
                 )
             self.validate_transcription_request(request=parsed_request)
 
@@ -611,7 +613,7 @@ class Serve:
 
         # Validate unexpected keys -- Pydantic doesn't validate extra keys in the request.
         input_keys = set(request.keys())
-        possible_keys = schema.__mutable_keys__  # type: ignore[attr-defined]
+        possible_keys = getattr(schema, "__mutable_keys__")
         unexpected_keys = input_keys - possible_keys
         if unexpected_keys:
             logger.error(f"Unexpected keys in the request: {unexpected_keys}")
@@ -837,12 +839,16 @@ class Serve:
             self.running_continuous_batching_manager.start()
 
         cb_manager = self.running_continuous_batching_manager
-        assert cb_manager is not None
+        if cb_manager is None:
+            raise RuntimeError("Continuous batching manager failed to initialize")
 
         # TODO (Joao, Lysandre): this should also work with tool support
-        inputs = processor.apply_chat_template(  # type: ignore[union-attr]
+        chat_inputs = processor.apply_chat_template(
             req["messages"], return_tensors="pt", add_generation_prompt=True, return_dict=True
-        ).to(model.device)["input_ids"][0]
+        )
+        if not hasattr(chat_inputs, "to"):
+            raise TypeError("Expected BatchEncoding from apply_chat_template with return_dict=True")
+        inputs = chat_inputs.to(model.device)["input_ids"][0]
 
         def stream_chat_completion(request_id, decode_stream):
             from ..generation.continuous_batching import RequestStatus
@@ -897,7 +903,9 @@ class Serve:
             while cb_manager.is_running() and result is None:
                 result = cb_manager.get_result(request_id=_request_id, timeout=1)
 
-            content = tokenizer.decode(result.generated_tokens)  # type: ignore[union-attr]
+            if result is None:
+                raise RuntimeError(f"No result received for request {_request_id}")
+            content = tokenizer.decode(result.generated_tokens)
 
             chat_completion_result = ChatCompletion(
                 id=_request_id,
@@ -1065,7 +1073,9 @@ class Serve:
             return_dict=True,
             tokenize=True,
         )
-        inputs = inputs.to(model.device)  # type: ignore[union-attr]
+        if not hasattr(inputs, "to"):
+            raise TypeError("Expected BatchEncoding from apply_chat_template with return_dict=True")
+        inputs = inputs.to(model.device)
         request_id = req.get("request_id", "req_0")
 
         # Temporary hack for GPTOSS 1: don't filter special tokens
@@ -1082,8 +1092,10 @@ class Serve:
 
         last_kv_cache = None
         if self.is_continuation(req) and not must_discard_cache:
-            seq_len = self.last_kv_cache.get_seq_length()  # type: ignore[union-attr]
-            if inputs["input_ids"].shape[-1] > seq_len:  # type: ignore[union-attr]
+            if self.last_kv_cache is None:
+                raise RuntimeError("Expected last_kv_cache for continuation request")
+            seq_len = self.last_kv_cache.get_seq_length()
+            if inputs["input_ids"].shape[-1] > seq_len:
                 last_kv_cache = self.last_kv_cache
 
         generation_kwargs = {
@@ -1313,10 +1325,12 @@ class Serve:
         else:
             raise TypeError("inputs should be a list, dict, or str")
 
-        inputs = processor.apply_chat_template(
+        chat_result = processor.apply_chat_template(
             inputs, add_generation_prompt=True, return_tensors="pt", return_dict=True
-        )["input_ids"]
-        inputs = inputs.to(model.device)  # type: ignore[union-attr]
+        )
+        if not hasattr(chat_result, "to"):
+            raise TypeError("Expected BatchEncoding from apply_chat_template with return_dict=True")
+        inputs = chat_result.to(model.device)["input_ids"]
         request_id = req.get("previous_response_id", "req_0")
 
         # Temporary hack for GPT-OSS 1: don't filter special tokens
@@ -1333,7 +1347,9 @@ class Serve:
 
         last_kv_cache = None
         if self.is_continuation(req) and not must_discard_cache:
-            seq_len = self.last_kv_cache.get_seq_length()  # type: ignore[union-attr]
+            if self.last_kv_cache is None:
+                raise RuntimeError("Expected last_kv_cache for continuation request")
+            seq_len = self.last_kv_cache.get_seq_length()
             if inputs["input_ids"].shape[-1] > seq_len:
                 last_kv_cache = self.last_kv_cache
 
@@ -1619,10 +1635,12 @@ class Serve:
         else:
             raise ValueError("inputs should be a list, dict, or str")
 
-        inputs = processor.apply_chat_template(
+        chat_result = processor.apply_chat_template(
             inputs, add_generation_prompt=True, return_tensors="pt", return_dict=True
-        )["input_ids"]
-        inputs = inputs.to(model.device)  # type: ignore[union-attr]
+        )
+        if not hasattr(chat_result, "to"):
+            raise TypeError("Expected BatchEncoding from apply_chat_template with return_dict=True")
+        inputs = chat_result.to(model.device)["input_ids"]
         request_id = req.get("previous_response_id", "req_0")
 
         # Temporary hack for GPTOSS 1: don't filter special tokens
@@ -1634,7 +1652,9 @@ class Serve:
 
         last_kv_cache = None
         if self.is_continuation(req) and not must_discard_cache:
-            seq_len = self.last_kv_cache.get_seq_length()  # type: ignore[union-attr]
+            if self.last_kv_cache is None:
+                raise RuntimeError("Expected last_kv_cache for continuation request")
+            seq_len = self.last_kv_cache.get_seq_length()
             if inputs.shape[-1] > seq_len:
                 last_kv_cache = self.last_kv_cache
 
@@ -1695,7 +1715,7 @@ class Serve:
         audio_model, audio_processor = self.load_audio_model_and_processor(model_id_and_revision)
 
         generation_streamer = TextIteratorStreamer(
-            audio_processor.tokenizer,  # type: ignore[attr-defined]
+            getattr(audio_processor, "tokenizer"),
             skip_special_tokens=True,
             skip_prompt=True,
         )
@@ -1704,7 +1724,7 @@ class Serve:
         )
 
         # Read the binary audio file using librosa
-        model_sampling_rate = audio_processor.feature_extractor.sampling_rate  # type: ignore[attr-defined]
+        model_sampling_rate = getattr(audio_processor, "feature_extractor").sampling_rate
         audio_bytes = io.BytesIO(req["file"])
         audio_array, _ = librosa.load(audio_bytes, sr=model_sampling_rate, mono=True)
         audio_inputs = audio_processor(audio_array, sampling_rate=model_sampling_rate, return_tensors="pt").to(

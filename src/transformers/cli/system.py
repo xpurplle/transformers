@@ -48,7 +48,7 @@ def env(
     """Print information about the environment."""
     import safetensors
 
-    safetensors_version = safetensors.__version__  # type: ignore[attr-defined]
+    safetensors_version = getattr(safetensors, "__version__", "unknown")
 
     accelerate_version = "not installed"
     accelerate_config = accelerate_config_str = "not found"

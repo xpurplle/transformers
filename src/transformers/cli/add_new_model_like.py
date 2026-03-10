@@ -19,7 +19,7 @@ import textwrap
 from collections.abc import Callable
 from datetime import date
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Any, cast
 
 import typer
 
@@ -58,11 +58,11 @@ if is_libcst_available():
                 body=[m.Assign(targets=[m.AssignTarget(target=m.Name())])]
             )
             if not self.is_in_class and m.matches(node, simple_top_level_assign_structure):
-                stmt = node.body[0]
-                assigned_variable = stmt.targets[0].target.value  # type: ignore[union-attr]
+                stmt = cast(cst.Assign, node.body[0])
+                assigned_variable = cast(cst.Name, stmt.targets[0].target).value
                 if assigned_variable == "__all__":
-                    elements = stmt.value.elements  # type: ignore[union-attr]
-                    self.public_classes = [element.value.value for element in elements]
+                    elements = cast(cst.Tuple, stmt.value).elements
+                    self.public_classes = [cast(cst.SimpleString, element.value).value for element in elements]
 
 
 CURRENT_YEAR = date.today().year
