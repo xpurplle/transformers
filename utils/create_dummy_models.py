@@ -333,7 +333,7 @@ def build_processor(config_class, processor_class, allow_no_checkpoint=False):
         # TODO: a better handle for revisions
         if config_class.__name__ == 'NanoChatConfig':
             revision = "refs/pr/1"
-        elif config_class.__name__ == 'Ernie4_5_VL_MoeConfig':
+        elif config_class.__name__ in ['Ernie4_5_VL_MoeConfig', 'Ernie4_5_VLMoeConfig']:
             revision = "refs/pr/10"
 
         sub_folder = ""
