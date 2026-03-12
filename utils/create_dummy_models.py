@@ -514,6 +514,12 @@ def _get_exact_config(_config, config_class):
     if not isinstance(_config, dict):
         for attr in dir(_config):
             if attr.endswith("_config") or attr in ["encoder", "decoder"]:
+
+                # TODO: damm, we have some `get_text_config` (and maybe others) which is function!!!
+                # For property, it's not callable!
+                if callable(getattr(_config, attr, None)):
+                    continue
+
                 keys.append(attr)
 
     # breakpoint()
@@ -1574,7 +1580,7 @@ def build(config_class, models_to_create, output_dir):
                 del result["pytorch"][pytorch_arch.__name__]
                 continue
 
-            breakpoint()
+            # breakpoint()
             model = build_model(pytorch_arch, used_tiny_config, output_dir=output_dir)
         except Exception as e:
 
