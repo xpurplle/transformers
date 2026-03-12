@@ -498,7 +498,8 @@ def build_processor(config_class, processor_class, allow_no_checkpoint=False):
 def _get_exact_config(_config, config_class):
 
     # breakpoint()
-    if isinstance(_config, config_class):
+    # TODO: we probably needs to make sure they are equal class, not just instance
+    if _config.__class__ == config_class:
         return _config
 
     # TODO: T5Gemma2 has `encoder` and `decoder` instead `_config`
@@ -515,9 +516,13 @@ def _get_exact_config(_config, config_class):
             if attr.endswith("_config") or attr in ["encoder", "decoder"]:
                 keys.append(attr)
 
+    # breakpoint()
     for key in keys:
         sub_config = getattr(_config, key) if not isinstance(_config, dict) else _config[key]
         if sub_config is not None:
+            # TODO: `VibeVoiceAcousticTokenizerEncoder/DecoderConfig` needs some protection!!!
+            if sub_config.__class__ == _config.__class__:
+                continue
             maybe_config = _get_exact_config(sub_config, config_class)
             if isinstance(maybe_config, config_class):
                 return maybe_config
