@@ -1068,7 +1068,7 @@ def get_checkpoint_dir(output_dir, model_arch):
     return os.path.join(output_dir, arch_name)
 
 
-def build_model(model_arch, tiny_config, output_dir):
+def build_model(model_arch, tiny_config, output_dir, keep_model=False):
     """Create and save a model for `model_arch`.
 
     Also copy the set of processors to each model (under the same model type) output folder.
@@ -1095,15 +1095,19 @@ def build_model(model_arch, tiny_config, output_dir):
     model = model_arch(config=tiny_config)
     # breakpoint()
 
-    #with tempfile.TemporaryDirectory(dir=checkpoint_dir) as tmpdir:
-    checkpoint_dir_tmp = tmpdir
-    checkpoint_dir_tmp = checkpoint_dir
-    model.save_pretrained(checkpoint_dir_tmp)
+    with tempfile.TemporaryDirectory(dir=checkpoint_dir) as tmpdir:
 
-    # can't call from_pretrained from saved one
-    if not tiny_config.__class__.__name__.endswith(("TimmBackboneConfig",)):
-        # breakpoint()
-        model.from_pretrained(checkpoint_dir_tmp)
+        if keep_model:
+            checkpoint_dir_tmp = checkpoint_dir
+        else:
+            checkpoint_dir_tmp = tmpdir
+
+        model.save_pretrained(checkpoint_dir_tmp)
+
+        # can't call from_pretrained from saved one
+        if not tiny_config.__class__.__name__.endswith(("TimmBackboneConfig",)):
+            # breakpoint()
+            model.from_pretrained(checkpoint_dir_tmp)
 
     return model
 
@@ -1232,12 +1236,12 @@ def build_composite_models(config_class, output_dir):
             # build encoder
             models_to_create = {"processor": encoder_processor, "pytorch": (encoder_class,)}
             encoder_output_dir = os.path.join(tmpdir, "encoder")
-            build(encoder_config_class, models_to_create, encoder_output_dir)
+            build(encoder_config_class, models_to_create, encoder_output_dir, keep_model=True)
 
             # build decoder
             models_to_create = {"processor": decoder_processor, "pytorch": (decoder_class,)}
             decoder_output_dir = os.path.join(tmpdir, "decoder")
-            build(decoder_config_class, models_to_create, decoder_output_dir)
+            build(decoder_config_class, models_to_create, decoder_output_dir, keep_model=True)
 
             # build encoder-decoder
             encoder_path = os.path.join(encoder_output_dir, encoder_class.__name__)
@@ -1382,7 +1386,7 @@ def get_config_overrides(config_class, processors):
     return config_overrides
 
 
-def build(config_class, models_to_create, output_dir):
+def build(config_class, models_to_create, output_dir, keep_model=False):
     """Create all models for a certain model type.
 
     Args:
@@ -1585,14 +1589,14 @@ def build(config_class, models_to_create, output_dir):
                 continue
 
             # breakpoint()
-            model = build_model(pytorch_arch, used_tiny_config, output_dir=output_dir)
+            model = build_model(pytorch_arch, used_tiny_config, output_dir=output_dir, keep_model=keep_model)
         except Exception as e:
 
             # TODO: hacky way to make `T5GemmaEncoderModel` work
             if pytorch_arch.__name__ == "T5GemmaEncoderModel":
                 _tiny_config = copy.deepcopy(tiny_config)
                 _tiny_config.is_encoder_decoder = False
-                model = build_model(pytorch_arch, _tiny_config, output_dir=output_dir)
+                model = build_model(pytorch_arch, _tiny_config, output_dir=output_dir, keep_model=keep_model)
             else:
                 model = None
                 error = f"Failed to create the pytorch model for {pytorch_arch}: {e}"
