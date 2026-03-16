@@ -28,7 +28,6 @@ import huggingface_hub
 import typer
 
 from .. import __version__
-from .._typing import has_torch_hpu, has_torch_npu
 from ..integrations.deepspeed import is_deepspeed_available
 from ..utils import (
     is_accelerate_available,
@@ -115,14 +114,13 @@ def env(
         elif pt_xpu_available:
             info["Using XPU in script?"] = "<fill in>"
             info["XPU type"] = torch.xpu.get_device_name()
-        elif pt_hpu_available:
+        elif pt_hpu_available and hasattr(torch, "hpu"):
             info["Using HPU in script?"] = "<fill in>"
-            if has_torch_hpu(torch):
-                info["HPU type"] = torch.hpu.get_device_name()
-        elif pt_npu_available:
+            info["HPU type"] = torch.hpu.get_device_name()
+        elif pt_npu_available and hasattr(torch, "npu"):
             info["Using NPU in script?"] = "<fill in>"
-            if has_torch_npu(torch):
-                info["NPU type"] = torch.npu.get_device_name()
+            info["NPU type"] = torch.npu.get_device_name()
+            if hasattr(torch.version, "cann"):
                 info["CANN version"] = torch.version.cann
 
     print("\nCopy-and-paste the text below in your GitHub issue and FILL OUT the two last points.\n")

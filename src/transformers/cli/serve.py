@@ -28,7 +28,7 @@ from contextlib import asynccontextmanager
 from functools import lru_cache
 from io import BytesIO
 from threading import Thread
-from typing import TYPE_CHECKING, Annotated, Optional, TypedDict, Union
+from typing import TYPE_CHECKING, Annotated, Any, Optional, Union
 
 import typer
 from huggingface_hub import scan_cache_dir
@@ -589,7 +589,7 @@ class Serve:
     def _validate_request(
         self,
         request: dict,
-        schema: TypedDict,
+        schema: type[Any],
         validator: "TypeAdapter",
         unused_fields: set,
     ):
@@ -599,8 +599,8 @@ class Serve:
         Args:
             request (`dict`):
                 The request to validate.
-            schema (`TypedDict`):
-                The schema of the request to validate. It is a `TypedDict` definition.
+            schema (`type[Any]`):
+                The `TypedDict` class used as the request schema.
             validator (`TypeAdapter`):
                 The validator to use to validate the request. Built from `schema`.
             unused_fields (`set`):

@@ -36,15 +36,6 @@ from typing import Any
 import packaging.version
 from packaging import version
 
-from .._typing import (
-    has_torch_compiler,
-    has_torch_hpu,
-    has_torch_mlu,
-    has_torch_musa,
-    has_torch_neuron,
-    has_torch_npu,
-    has_torch_xpu,
-)
 from . import logging
 
 
@@ -268,14 +259,15 @@ def is_torch_npu_available(check_device=False) -> bool:
     import torch_npu  # noqa: F401
 
     if check_device:
-        if has_torch_npu(torch):
-            try:
+        try:
+            # Will raise a RuntimeError if no NPU is found
+            if hasattr(torch, "npu"):
                 _ = torch.npu.device_count()
                 return torch.npu.is_available()
-            except RuntimeError:
-                return False
-        return False
-    return has_torch_npu(torch)
+            return False
+        except RuntimeError:
+            return False
+    return hasattr(torch, "npu") and torch.npu.is_available()
 
 
 @lru_cache
@@ -294,14 +286,13 @@ def is_torch_xpu_available(check_device: bool = False) -> bool:
     import torch
 
     if check_device:
-        if has_torch_xpu(torch):
-            try:
-                _ = torch.xpu.device_count()
-                return torch.xpu.is_available()
-            except RuntimeError:
-                return False
-        return False
-    return has_torch_xpu(torch)
+        try:
+            # Will raise a RuntimeError if no XPU is found
+            _ = torch.xpu.device_count()
+            return torch.xpu.is_available()
+        except RuntimeError:
+            return False
+    return hasattr(torch, "xpu") and torch.xpu.is_available()
 
 
 @lru_cache
@@ -319,7 +310,7 @@ def is_torch_mlu_available() -> bool:
     pytorch_cndev_based_mlu_check_previous_value = os.environ.get("PYTORCH_CNDEV_BASED_MLU_CHECK")
     try:
         os.environ["PYTORCH_CNDEV_BASED_MLU_CHECK"] = str(1)
-        available = has_torch_mlu(torch)
+        available = torch.mlu.is_available() if hasattr(torch, "mlu") else False
     finally:
         if pytorch_cndev_based_mlu_check_previous_value:
             os.environ["PYTORCH_CNDEV_BASED_MLU_CHECK"] = pytorch_cndev_based_mlu_check_previous_value
@@ -344,14 +335,15 @@ def is_torch_musa_available(check_device=False) -> bool:
         return False
 
     if check_device:
-        if has_torch_musa(torch):
-            try:
+        try:
+            # Will raise a RuntimeError if no MUSA is found
+            if hasattr(torch, "musa"):
                 _ = torch.musa.device_count()
                 return torch.musa.is_available()
-            except RuntimeError:
-                return False
-        return False
-    return has_torch_musa(torch)
+            return False
+        except RuntimeError:
+            return False
+    return hasattr(torch, "musa") and torch.musa.is_available()
 
 
 @lru_cache
@@ -397,7 +389,7 @@ def is_torch_hpu_available() -> bool:
         # import habana_frameworks.torch in case of lazy mode to patch torch with torch.hpu
         import habana_frameworks.torch  # noqa: F401
 
-    if not has_torch_hpu(torch):
+    if not hasattr(torch, "hpu") or not torch.hpu.is_available():
         return False
 
     # We patch torch.gather for int64 tensors to avoid a bug on Gaudi
@@ -479,11 +471,6 @@ def is_torch_neuron_available(check_device: bool = False) -> bool:
     if importlib.util.find_spec("torch_neuronx") is None:
         return False
 
-    if has_torch_neuron(torch):
-        if check_device:
-            try:
-                import torch_neuronx  # noqa: F401
-
     if check_device:
         try:
             import torch_neuronx  # noqa: F401
@@ -496,7 +483,7 @@ def is_torch_neuron_available(check_device: bool = False) -> bool:
         except RuntimeError:
             return False
 
-    return neuron.is_available()
+    return hasattr(torch, "neuron") and torch.neuron.is_available()
 
 
 @lru_cache
@@ -508,7 +495,7 @@ def is_torch_bf16_gpu_available() -> bool:
 
     if torch.cuda.is_available():
         return torch.cuda.is_bf16_supported()
-    if has_torch_xpu(torch):
+    if is_torch_xpu_available():
         return torch.xpu.is_bf16_supported()
     if is_torch_hpu_available():
         return True
