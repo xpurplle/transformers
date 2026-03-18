@@ -270,7 +270,7 @@ class Modality(enum.Enum):
 
 def require_batch_encoding(obj: object) -> BatchEncoding:
     if not isinstance(obj, BatchEncoding):
-        raise TypeError("Expected BatchEncoding from apply_chat_template with return_dict=True")
+        raise TypeError("Expected BatchEncoding from `apply_chat_template` with `return_dict="True"`)
     return obj
 
 
