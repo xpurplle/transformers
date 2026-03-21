@@ -140,7 +140,7 @@ class PPOCRV5ServerRecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.
     model_split_percents = [0.5, 0.8]
 
     def setUp(self):
-        self.model_tester = PPOCRV5ServerRecModelTester(parent)
+        self.model_tester = PPOCRV5ServerRecModelTester(self)
         self.config_tester = ConfigTester(
             self,
             config_class=PPOCRV5ServerRecConfig,
