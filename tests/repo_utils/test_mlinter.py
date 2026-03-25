@@ -15,6 +15,7 @@
 import os
 import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -658,6 +659,146 @@ class _LazyConfigMapping(OrderedDict[str, str]):
                 Path("src/transformers/models/bar/modeling_bar.py"),
             },
         )
+
+    # --- TRF014: _tied_weights_keys requires tie_word_embeddings in config ---
+
+    def test_trf014_valid_config_has_tie_word_embeddings(self):
+        """Config declares tie_word_embeddings — no violation."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            model_dir = Path(tmpdir)
+            config_source = """
+class FooConfig(PreTrainedConfig):
+    tie_word_embeddings: bool = True
+"""
+            (model_dir / "configuration_foo.py").write_text(config_source)
+
+            modeling_source = """
+class FooPreTrainedModel(PreTrainedModel):
+    pass
+
+class FooForCausalLM(FooPreTrainedModel):
+    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
+"""
+            file_path = model_dir / "modeling_foo.py"
+            violations = mlinter.analyze_file(file_path, modeling_source, enabled_rules={mlinter.TRF014})
+            trf014 = [v for v in violations if v.rule_id == mlinter.TRF014]
+            self.assertEqual(trf014, [])
+
+    def test_trf014_missing_tie_word_embeddings(self):
+        """Config lacks tie_word_embeddings — violation expected."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            model_dir = Path(tmpdir)
+            config_source = """
+class FooConfig(PreTrainedConfig):
+    hidden_size: int = 768
+"""
+            (model_dir / "configuration_foo.py").write_text(config_source)
+
+            modeling_source = """
+class FooPreTrainedModel(PreTrainedModel):
+    pass
+
+class FooForCausalLM(FooPreTrainedModel):
+    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
+"""
+            file_path = model_dir / "modeling_foo.py"
+            violations = mlinter.analyze_file(file_path, modeling_source, enabled_rules={mlinter.TRF014})
+            trf014 = [v for v in violations if v.rule_id == mlinter.TRF014]
+            self.assertEqual(len(trf014), 1)
+            self.assertIn("tie_word_embeddings", trf014[0].message)
+
+    def test_trf014_empty_tied_weights_keys_no_violation(self):
+        """Empty _tied_weights_keys — no violation even without config field."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            model_dir = Path(tmpdir)
+            config_source = """
+class FooConfig(PreTrainedConfig):
+    hidden_size: int = 768
+"""
+            (model_dir / "configuration_foo.py").write_text(config_source)
+
+            modeling_source = """
+class FooPreTrainedModel(PreTrainedModel):
+    pass
+
+class FooForCausalLM(FooPreTrainedModel):
+    _tied_weights_keys = {}
+"""
+            file_path = model_dir / "modeling_foo.py"
+            violations = mlinter.analyze_file(file_path, modeling_source, enabled_rules={mlinter.TRF014})
+            trf014 = [v for v in violations if v.rule_id == mlinter.TRF014]
+            self.assertEqual(trf014, [])
+
+    def test_trf014_inherited_config_no_violation(self):
+        """Config inherits from another model config (not PreTrainedConfig) — no violation."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            model_dir = Path(tmpdir)
+            config_source = """
+class FooConfig(LlamaConfig):
+    model_type = "foo"
+"""
+            (model_dir / "configuration_foo.py").write_text(config_source)
+
+            modeling_source = """
+class FooPreTrainedModel(PreTrainedModel):
+    pass
+
+class FooForCausalLM(FooPreTrainedModel):
+    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
+"""
+            file_path = model_dir / "modeling_foo.py"
+            violations = mlinter.analyze_file(file_path, modeling_source, enabled_rules={mlinter.TRF014})
+            trf014 = [v for v in violations if v.rule_id == mlinter.TRF014]
+            self.assertEqual(trf014, [])
+
+    def test_trf014_composite_with_text_config_no_violation(self):
+        """Composite config with sub_configs text_config — no violation."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            model_dir = Path(tmpdir)
+            config_source = """
+class FooConfig(PreTrainedConfig):
+    sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig}
+"""
+            (model_dir / "configuration_foo.py").write_text(config_source)
+
+            modeling_source = """
+class FooPreTrainedModel(PreTrainedModel):
+    pass
+
+class FooForConditionalGeneration(FooPreTrainedModel):
+    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
+"""
+            file_path = model_dir / "modeling_foo.py"
+            violations = mlinter.analyze_file(file_path, modeling_source, enabled_rules={mlinter.TRF014})
+            trf014 = [v for v in violations if v.rule_id == mlinter.TRF014]
+            self.assertEqual(trf014, [])
+
+    def test_trf014_config_file_suffix_matching(self):
+        """When multiple config files exist, matches by suffix (modeling_foo_text -> configuration_foo_text)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            model_dir = Path(tmpdir)
+            # Audio config (no tie_word_embeddings)
+            (model_dir / "configuration_foo_audio.py").write_text("""
+class FooAudioConfig(PreTrainedConfig):
+    sample_rate: int = 16000
+""")
+            # Text config (has tie_word_embeddings)
+            (model_dir / "configuration_foo_text.py").write_text("""
+class FooTextConfig(PreTrainedConfig):
+    tie_word_embeddings: bool = True
+""")
+
+            modeling_source = """
+class FooTextPreTrainedModel(PreTrainedModel):
+    pass
+
+class FooTextForCausalLM(FooTextPreTrainedModel):
+    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
+"""
+            file_path = model_dir / "modeling_foo_text.py"
+            violations = mlinter.analyze_file(file_path, modeling_source, enabled_rules={mlinter.TRF014})
+            trf014 = [v for v in violations if v.rule_id == mlinter.TRF014]
+            self.assertEqual(trf014, [])
 
 
 if __name__ == "__main__":
