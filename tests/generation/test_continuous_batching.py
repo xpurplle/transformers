@@ -1064,7 +1064,9 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         """Tests that per-request logits processor kwargs (temperature, top_k, top_p) work correctly in generation."""
         model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
         max_new_tokens = 10
-        temperatures = [2.0, 1.0]
+        temperatures = [1.0, 1.0]
+        top_ks = [10, 50]
+        top_ps = [0.9, 0.99]
 
         tokenizer, model = get_tokenizer_and_model(model_id, "flash_attention_2", torch_device)
         eos_token_id = model.config.eos_token_id  # type: ignore[attr-defined]
@@ -1076,9 +1078,9 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         # Use the context manager to add requests with different per-request kwargs
         generation_config = GenerationConfig(
             do_sample=True,
-            temperature=3.0,  # enables temperature warping
-            # top_k=10, TODO: reinstate once fixed
-            # top_p=0.9,
+            temperature=max(temperatures) + 1,  # enables temperature warping
+            top_k=max(top_ks) + 1,
+            top_p=min(top_ps) - 0.01,
             max_new_tokens=max_new_tokens,
             eos_token_id=eos_token_id,
         )
@@ -1100,9 +1102,13 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         manager.start()
         try:
             # Request 0: low temperature (more deterministic)
-            req0_id = manager.add_request(input_ids, max_new_tokens=max_new_tokens, temperature=temperatures[0])#, top_k=10, top_p=0.9)
+            req0_id = manager.add_request(
+                input_ids, max_new_tokens=max_new_tokens, temperature=temperatures[0], top_k=top_ks[0], top_p=top_ps[0]
+            )
             # Request 1: high temperature (more random)
-            req1_id = manager.add_request(input_ids, max_new_tokens=max_new_tokens, temperature=temperatures[1])#, top_k=50, top_p=0.99)
+            req1_id = manager.add_request(
+                input_ids, max_new_tokens=max_new_tokens, temperature=temperatures[1], top_k=top_ks[1], top_p=top_ps[1]
+            )
             # Collect results
             results = {}
             while len(results) < 2:
@@ -1128,6 +1134,8 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         gen_config = GenerationConfig(
             do_sample=True,
             temperature=temperatures[0],
+            top_k=top_ks[0],
+            top_p=top_ps[0],
             max_new_tokens=max_new_tokens,
             eos_token_id=eos_token_id,
         )
@@ -1156,6 +1164,8 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         gen_config = GenerationConfig(
             do_sample=True,
             temperature=temperatures[1],
+            top_k=top_ks[1],
+            top_p=top_ps[1],
             max_new_tokens=max_new_tokens,
             eos_token_id=eos_token_id,
         )

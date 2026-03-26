@@ -131,6 +131,7 @@ class ContinuousBatchingLogitsProcessorList:
             if isinstance(processor, ContinuousBatchingLogitsProcessor):
                 tensorized_arg = processor.prepare_tensor_args(requests_in_batch)
                 arg_storage[current_arg_id, :tensorized_arg.size(0)] = tensorized_arg.to(arg_storage.device)
+                current_arg_id += 1
         return arg_storage
 
     def __call__(
@@ -168,7 +169,8 @@ class ContinuousBatchingTemperatureLogitsWarper(ContinuousBatchingLogitsProcesso
 
     def __call__(self, scores: torch.FloatTensor, tensor_arg: torch.Tensor) -> torch.FloatTensor:
         temperatures = tensor_arg[:scores.size(1)].view(dtype=torch.float32)  # shape [N]
-        return scores / temperatures.view(1, -1, 1)  # broadcast to [1, N, V]
+        scores_processed = scores / temperatures.view(1, -1, 1)  # broadcast to [1, N, V]
+        return scores_processed
 
 
 class ContinuousBatchingTopKLogitsWarper(ContinuousBatchingLogitsProcessor):
@@ -202,7 +204,7 @@ class ContinuousBatchingTopKLogitsWarper(ContinuousBatchingLogitsProcessor):
         # Compute top-k: sort descending, get threshold at position (top_k - 1) which is the k-th largest
         sorted_scores = torch.sort(scores, dim=-1, descending=True)[0]  # [1, N, V]
         # Gather threshold at index (top_k - 1) for each token (0-indexed, so k-th largest)
-        top_k_indices = top_k.view(1, -1, 1).to(dtype=torch.int64)  # [1, N, 1]
+        top_k_indices = (top_k - 1).view(1, -1, 1).to(dtype=torch.int64)  # [1, N, 1]
         thresholds = sorted_scores.gather(dim=-1, index=top_k_indices)  # [1, N, 1]
         mask = scores < thresholds
         scores_processed = scores.masked_fill(mask, self.filter_value)

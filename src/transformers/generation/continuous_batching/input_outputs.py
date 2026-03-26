@@ -262,7 +262,8 @@ class ContinuousBatchingIOs:
         kv_len = self.read_index_storage.size(-1) if full_reset else self.max_kv_read
 
         # Reset the attributes part of the bulk input tensor in one kernel
-        self._bulk_input_tensor[:, : q_len + 1].zero_()
+        self._bulk_input_tensor[:self.bulk_inputs, : q_len + 1].zero_()
+        self._bulk_input_tensor[self.bulk_inputs:, : q_len + 1].fill_(1)
         self.max_seqlen_q = 0
 
         # Reset the logits indices and output ids
