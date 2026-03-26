@@ -839,17 +839,23 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
     # -----------------------------------------Misc. tests----------------------------------------- #
     #                     Various tests that don't fit into the other categories                    #
     # --------------------------------------------------------------------------------------------- #
-    def _test_block_sharing(
-        self, model_id: str, expected_layer_types: dict[str, int], input_msg: str, expected_output_tokens: list[int]
-    ) -> None:
-        tokenizer, model = get_tokenizer_and_model(model_id, "sdpa", torch_device)
+    def _test_block_sharing(self, model_id: str, expected_layer_types: dict[str, int], input_msg: str) -> None:
+        # Use float32 for SDPA to handle precision differences from attention masks (same as parity test)
+        tokenizer, model = get_tokenizer_and_model(model_id, "sdpa", torch_device, dtype=torch.float32)
+
+        # Configure generation for parity: disable processors not supported by CB (like repetition_penalty)
+        model.generation_config.max_new_tokens = 32
+        model.generation_config.do_sample = False
+        model.generation_config.repetition_penalty = None
+
+        # Get expected output from regular generate for parity check
+        expected_output_tokens, _ = regular_generate(model, tokenizer, [input_msg])
 
         cb_context_manager = model.continuous_batching_context_manager(
-            generation_config=GenerationConfig(do_sample=False),
+            generation_config=model.generation_config,
             continuous_batching_config=ContinuousBatchingConfig(block_size=32),
         )
         with cb_context_manager as manager:
-            manager.logit_processor.clear()
 
             # Create a request with at least 32 tokens but less than 64 so prefill only generates one complete block
             inputs = get_generation_inputs([input_msg], tokenizer, for_continuous_batching=True)[0]
@@ -923,31 +929,23 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
                 f"Expected total prefix length to be {expected_total_prefix_length}, but got {total_prefix_length = }",
             )
 
-        # Check the outputs were the same
+        # Check the outputs were the same (block sharing should produce identical results)
         self.assertEqual(chunk_no_reuse.generated_tokens, chunk_with_reuse.generated_tokens)
 
-        # As an additional sanity check, we also compare to the generated tokens when prefix sharing is disabled
-        self.assertEqual(chunk_no_reuse.generated_tokens, expected_output_tokens)
+        # Verify parity with regular generate
+        self.assertEqual(chunk_no_reuse.generated_tokens, expected_output_tokens[0])
 
     def test_prefix_sharing(self) -> None:
         model_id = "Qwen/Qwen2.5-0.5B-Instruct"
         num_layer_groups = {"full_attention": 1, "sliding_window": 0}
         input_msg = "What is the Transformers library known for?"
-        expected_generated_tokens = Expectations({
-            (None, None): [785, 80532, 6733, 374, 3881, 369, 1181, 5726, 311, 1855, 323, 36635, 3460, 12934, 4128, 4119, 11, 2670, 1846, 429, 646, 6923, 1467, 11, 14683, 1467, 11, 323, 2736, 1008, 4128, 13904]
-        }).get_expectation()  # fmt: skip
-
-        return self._test_block_sharing(model_id, num_layer_groups, input_msg, expected_generated_tokens)
+        return self._test_block_sharing(model_id, num_layer_groups, input_msg)
 
     def test_block_sharing_with_hybrid_model(self) -> None:
         model_id = "google/gemma-3-1b-it"
         num_layer_groups = {"full_attention": 2, "sliding_window": 11}
         input_msg = "I am a software engineer looking to use open source software to build a new AI agent. What is the Transformers library known for?"
-        expected_generated_tokens = Expectations({
-            (None, None): [19058, 236764, 1531, 236789, 236751, 2541, 1679, 1144, 506, 128282, 9427, 563, 3224, 573, 236764, 10916, 528, 506, 4403, 529, 3788, 12498, 11362, 236761, 1030, 236789, 236751, 496, 808, 120749, 236829, 532]
-        }).get_expectation()  # fmt: skip
-
-        return self._test_block_sharing(model_id, num_layer_groups, input_msg, expected_generated_tokens)
+        return self._test_block_sharing(model_id, num_layer_groups, input_msg)
 
     @parameterized.expand([True, False])
     @require_flash_attn  # otherwise the test can fail because attention bias has a very slight impact on SDPA and eager
